@@ -15,7 +15,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ---- Middlewares globais ------------------------------------------------
-app.use(express.json());                              // parse de JSON no body
+app.use(express.json());  
+app.use(session({ secret: 'troque-por-string-aleatoria', resave: false, saveUninitialized: false, cookie: { httpOnly: true, maxAge: 8 * 60 * 60 * 1000 } }));
+app.use(requireAuth);           // middleware do arquivo .js
+app.use(express.static(...));   // deve vir DEPOIS do requireAuth       
+// app.post('/api/login',  ...);
+app.post('/api/logout', ...);                     // parse de JSON no body
 app.use(express.static(path.join(__dirname, 'public'))); // serve o front
 
 // ---- Helpers ------------------------------------------------------------

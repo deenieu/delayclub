@@ -11,10 +11,15 @@
     "seed": "node --no-warnings seed.js",
     "dev": "node --no-warnings server.js"
   },
-  "keywords": ["delay-club", "crm", "vip"],
+  "keywords": [
+    "delay-club",
+    "crm",
+    "vip"
+  ],
   "author": "Delay Club",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "express-session": "^1.19.0"
   }
 }

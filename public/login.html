@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — Delay Club Manager</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .login-wrapper {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      background: var(--bg);
+    }
+
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-medium);
+      width: 100%;
+      max-width: 420px;
+      overflow: hidden;
+      animation: rise 0.28s ease;
+    }
+
+    .login-card__header {
+      background: var(--ink);
+      padding: 32px 32px 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .login-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .login-brand__mark {
+      width: 48px; height: 48px;
+      display: grid; place-items: center;
+      background: var(--gold);
+      color: var(--ink);
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 20px;
+      letter-spacing: 1px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .login-brand__text h1 {
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-size: 24px;
+      line-height: 1;
+      color: var(--bg);
+      letter-spacing: 0.3px;
+    }
+
+    .login-brand__text span {
+      display: block;
+      margin-top: 4px;
+      font-size: 11px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--gold-soft);
+    }
+
+    .login-card__body {
+      padding: 28px 32px 32px;
+    }
+
+    .login-card__body h2 {
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-size: 18px;
+      color: var(--ink);
+      margin-bottom: 22px;
+    }
+
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .login-form .field label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--ink-mute);
+      font-weight: 600;
+    }
+
+    .login-form .field input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      padding: 11px 14px;
+      font-size: 14px;
+      color: var(--ink);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .login-form .field input:focus {
+      outline: none;
+      border-color: var(--ink);
+      box-shadow: 0 0 0 3px rgba(26,34,56,0.10);
+    }
+
+    .login-form .btn--primary {
+      width: 100%;
+      padding: 12px;
+      font-size: 15px;
+      margin-top: 4px;
+    }
+
+    .login-error {
+      background: var(--danger-bg);
+      color: var(--danger);
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      border: 1px solid #e8b8b8;
+      display: none;
+    }
+
+    .login-error.visible { display: block; }
+
+    .login-footer {
+      margin-top: 22px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--ink-mute);
+      letter-spacing: 0.3px;
+    }
+
+    @media (max-width: 480px) {
+      .login-card__header { padding: 24px 22px 20px; }
+      .login-card__body { padding: 22px 22px 26px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-wrapper">
+    <div class="login-card">
+
+      <div class="login-card__header">
+        <div class="login-brand">
+          <div class="login-brand__mark">DC</div>
+          <div class="login-brand__text">
+            <h1>Delay Club</h1>
+            <span>Manager</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="login-card__body">
+        <h2>Entrar no sistema</h2>
+
+        <div class="login-form">
+          <div class="field">
+            <label for="username">Usuário</label>
+            <input type="text" id="username" placeholder="Digite seu usuário" autocomplete="username" autofocus />
+          </div>
+
+          <div class="field">
+            <label for="password">Senha</label>
+            <input type="password" id="password" placeholder="Digite sua senha" autocomplete="current-password" />
+          </div>
+
+          <div class="login-error" id="loginError">Usuário ou senha incorretos.</div>
+
+          <button class="btn btn--primary" id="btnLogin">Entrar</button>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="login-footer">Delay Club Manager &copy; 2025</div>
+  </div>
+
+  <script>
+    const btnLogin = document.getElementById('btnLogin');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const loginError = document.getElementById('loginError');
+
+    async function doLogin() {
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
+
+      if (!username || !password) {
+        loginError.textContent = 'Preencha o usuário e a senha.';
+        loginError.classList.add('visible');
+        return;
+      }
+
+      btnLogin.disabled = true;
+      btnLogin.textContent = 'Entrando...';
+      loginError.classList.remove('visible');
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          const data = await res.json().catch(() => ({}));
+          loginError.textContent = data.error || 'Usuário ou senha incorretos.';
+          loginError.classList.add('visible');
+          passwordInput.value = '';
+          passwordInput.focus();
+        }
+      } catch (err) {
+        loginError.textContent = 'Erro de conexão. Tente novamente.';
+        loginError.classList.add('visible');
+      } finally {
+        btnLogin.disabled = false;
+        btnLogin.textContent = 'Entrar';
+      }
+    }
+
+    btnLogin.addEventListener('click', doLogin);
+
+    [usernameInput, passwordInput].forEach(el => {
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+    });
+  </script>
+
+</body>
+</html>
