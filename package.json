@@ -1,0 +1,20 @@
+{
+  "name": "delay-club-manager",
+  "version": "1.0.0",
+  "description": "Sistema de gestão de clientes do grupo VIP Delay Club",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "seed": "node --no-warnings seed.js",
+    "dev": "node --no-warnings server.js"
+  },
+  "keywords": ["delay-club", "crm", "vip"],
+  "author": "Delay Club",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}
