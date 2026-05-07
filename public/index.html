@@ -224,7 +224,8 @@
       .then(r => r.json())
       .then(user => {
         if (user.role === 'admin') {
-          document.getElementById('navUsuarios').style.display = '';
+          const nav = document.getElementById('navUsuarios');
+          nav.style.display = 'inline-flex';
         }
       })
       .catch(() => {});
