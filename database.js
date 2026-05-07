@@ -3,14 +3,6 @@
  * ------------------------------------------------------------------
  * Configuração do banco de dados SQLite usando o módulo NATIVO do
  * Node.js (`node:sqlite`), disponível a partir do Node 22.5+.
- *
- * Vantagens:
- *  - Zero dependências nativas para compilar
- *  - Funciona igual em Linux, macOS e Windows
- *  - API síncrona, simples e familiar
- *
- * Cria o arquivo do banco automaticamente na primeira execução
- * e expõe a instância pronta para uso pelo restante da aplicação.
  * ------------------------------------------------------------------
  */
 
@@ -18,37 +10,53 @@ const path = require('path');
 const fs = require('fs');
 const { DatabaseSync } = require('node:sqlite');
 
-// Garante que a pasta /data existe (onde o arquivo .db será salvo)
-const dataDir = path.join(__dirname, 'data');
+const dataDir = process.env.DB_PATH
+  ? path.dirname(process.env.DB_PATH)
+  : path.join(__dirname, 'data');
+
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-// Caminho final do arquivo do banco
-const dbPath = path.join(dataDir, 'delay_club.db');
+const dbPath = process.env.DB_PATH || path.join(dataDir, 'delay_club.db');
 
-// Abre (ou cria) o banco
 const db = new DatabaseSync(dbPath);
 
-// Otimização: WAL (write-ahead logging) acelera escritas
 db.exec('PRAGMA journal_mode = WAL;');
 
-/**
- * Cria a tabela de clientes caso ainda não exista.
- * Os campos de data são armazenados como TEXT no formato ISO (YYYY-MM-DD)
- * para facilitar comparação lexicográfica e parsing no front.
- */
+// Tabela de clientes
 db.exec(`
   CREATE TABLE IF NOT EXISTS clients (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT    NOT NULL,
     lead_owner      TEXT    NOT NULL,
-    payment_date    TEXT    NOT NULL,   -- YYYY-MM-DD
+    payment_date    TEXT    NOT NULL,
     payment_amount  REAL    NOT NULL,
-    renewal_date    TEXT    NOT NULL,   -- YYYY-MM-DD (sempre = payment_date + 30 dias)
+    renewal_date    TEXT    NOT NULL,
     created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
   );
 `);
+
+// Tabela de usuários
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    username   TEXT    NOT NULL UNIQUE,
+    password   TEXT    NOT NULL,
+    role       TEXT    NOT NULL DEFAULT 'user',  -- 'admin' ou 'user'
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
+// Cria o admin padrão se não existir nenhum usuário
+const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
+if (userCount === 0) {
+  db.prepare(`
+    INSERT INTO users (username, password, role) VALUES (?, ?, ?)
+  `).run('admin', 'delayclub2025', 'admin');
+  console.log('  Usuário admin criado com senha padrão: delayclub2025');
+  console.log('  ⚠️  Altere a senha após o primeiro acesso!\n');
+}
 
 module.exports = db;

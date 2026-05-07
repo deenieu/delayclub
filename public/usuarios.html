@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Usuários — Delay Club Manager</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+
+  <style>
+    .role-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .role-badge--admin { background: #1a2238; color: #f4f1ea; }
+    .role-badge--user  { background: var(--bg-alt); color: var(--ink-soft); border: 1px solid var(--line-strong); }
+
+    .topbar__nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .nav-link {
+      font-size: 13px;
+      color: var(--gold-soft);
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      font-weight: 500;
+    }
+    .nav-link:hover { border-color: var(--gold); color: var(--gold); }
+    .nav-link--active { border-color: var(--gold); color: var(--gold); }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .page-header h2 {
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-size: 24px;
+      color: var(--ink);
+    }
+    .page-header p {
+      font-size: 13px;
+      color: var(--ink-mute);
+      margin-top: 4px;
+    }
+
+    .users-table th.th-actions { text-align: right; }
+    .users-table .cell-actions { text-align: right; }
+  </style>
+</head>
+<body>
+
+  <!-- CABEÇALHO -->
+  <header class="topbar">
+    <div class="topbar__inner">
+      <div class="brand">
+        <div class="brand__mark">DC</div>
+        <div class="brand__text">
+          <h1>Delay Club</h1>
+          <span></span>
+        </div>
+      </div>
+      <div class="topbar__nav">
+        <a href="/" class="nav-link">Clientes</a>
+        <a href="/usuarios.html" class="nav-link nav-link--active">Usuários</a>
+        <button class="nav-link" id="btnLogout" style="cursor:pointer;">Sair</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <div class="page-header">
+      <div>
+        <h2>Gerenciar Usuários</h2>
+        <p>Somente administradores podem acessar esta página.</p>
+      </div>
+      <button class="btn btn--primary" id="btnAdd">
+        <span class="btn__icon">+</span>
+        Novo Usuário
+      </button>
+    </div>
+
+    <!-- Tabela de usuários -->
+    <section class="list-wrapper">
+      <table class="clients-table users-table">
+        <thead>
+          <tr>
+            <th>Usuário</th>
+            <th>Perfil</th>
+            <th>Criado em</th>
+            <th class="th-actions">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="usersTbody">
+          <tr><td colspan="4" style="padding:32px;text-align:center;color:var(--ink-mute);">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+
+  <!-- MODAL CRIAR/EDITAR -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal__backdrop" data-close="true"></div>
+    <div class="modal__panel modal__panel--small" role="dialog" aria-modal="true">
+      <header class="modal__header">
+        <h2 id="modalTitle">Novo usuário</h2>
+        <button class="modal__close" aria-label="Fechar" data-close="true">×</button>
+      </header>
+      <div class="form">
+        <input type="hidden" id="userId" />
+
+        <div class="form__row" id="rowUsername">
+          <label for="fUsername">Nome de usuário *</label>
+          <input type="text" id="fUsername" maxlength="40" placeholder="Ex: marina" />
+          <small>Apenas letras minúsculas, números e underline. Não pode ser alterado depois.</small>
+        </div>
+
+        <div class="form__row">
+          <label for="fPassword">Senha *</label>
+          <input type="password" id="fPassword" maxlength="80" placeholder="Mínimo 4 caracteres" />
+          <small id="passwordHint">Deixe em branco para manter a senha atual.</small>
+        </div>
+
+        <div class="form__row">
+          <label for="fRole">Perfil *</label>
+          <select id="fRole">
+            <option value="user">Usuário comum</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
+
+        <div class="form__error" id="formError" hidden></div>
+
+        <div class="form__actions">
+          <button type="button" class="btn btn--ghost" data-close="true">Cancelar</button>
+          <button type="button" class="btn btn--primary" id="btnSave">Salvar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CONFIRMAÇÃO -->
+  <div class="modal" id="confirmModal" hidden>
+    <div class="modal__backdrop" data-close-confirm="true"></div>
+    <div class="modal__panel modal__panel--small" role="dialog" aria-modal="true">
+      <header class="modal__header">
+        <h2>Confirmar exclusão</h2>
+        <button class="modal__close" aria-label="Fechar" data-close-confirm="true">×</button>
+      </header>
+      <div class="confirm-body">
+        <p id="confirmMessage">Tem certeza?</p>
+      </div>
+      <div class="form__actions">
+        <button type="button" class="btn btn--ghost" data-close-confirm="true">Cancelar</button>
+        <button type="button" class="btn btn--danger" id="btnConfirmOk">Excluir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast" hidden></div>
+
+  <script>
+    // ---- Utilidades ----
+    const $ = id => document.getElementById(id);
+    let currentUser = null;
+    let deleteTargetId = null;
+
+    function showToast(msg, type = 'success') {
+      const t = $('toast');
+      t.textContent = msg;
+      t.className = `toast toast--${type}`;
+      t.hidden = false;
+      setTimeout(() => t.classList.add('toast--show'), 10);
+      setTimeout(() => {
+        t.classList.remove('toast--show');
+        setTimeout(() => { t.hidden = true; }, 200);
+      }, 3000);
+    }
+
+    function formatDate(str) {
+      if (!str) return '—';
+      const [y, m, d] = str.slice(0, 10).split('-');
+      return `${d}/${m}/${y}`;
+    }
+
+    // ---- Verifica se é admin ----
+    async function checkAdmin() {
+      const res = await fetch('/api/me');
+      if (!res.ok) { window.location.href = '/login.html'; return; }
+      currentUser = await res.json();
+      if (currentUser.role !== 'admin') { window.location.href = '/'; }
+    }
+
+    // ---- Carrega usuários ----
+    async function loadUsers() {
+      const res = await fetch('/api/users');
+      if (!res.ok) return;
+      const users = await res.json();
+      renderUsers(users);
+    }
+
+    function renderUsers(users) {
+      const tbody = $('usersTbody');
+      if (!users.length) {
+        tbody.innerHTML = `<tr><td colspan="4" style="padding:32px;text-align:center;color:var(--ink-mute);">Nenhum usuário cadastrado.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = users.map(u => `
+        <tr>
+          <td class="client-name">${u.username}</td>
+          <td><span class="role-badge role-badge--${u.role}">${u.role === 'admin' ? 'Admin' : 'Usuário'}</span></td>
+          <td class="cell-date">${formatDate(u.created_at)}</td>
+          <td class="cell-actions">
+            <div class="row-actions">
+              <button class="btn-icon" title="Editar" onclick="openEdit(${u.id}, '${u.username}', '${u.role}')">✎</button>
+              ${u.id !== currentUser.id ? `<button class="btn-icon btn-icon--del" title="Excluir" onclick="confirmDelete(${u.id}, '${u.username}')">×</button>` : ''}
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // ---- Modal criar ----
+    function openCreate() {
+      $('modalTitle').textContent = 'Novo usuário';
+      $('userId').value = '';
+      $('fUsername').value = '';
+      $('fPassword').value = '';
+      $('fRole').value = 'user';
+      $('rowUsername').style.display = '';
+      $('fUsername').disabled = false;
+      $('passwordHint').style.display = 'none';
+      $('formError').hidden = true;
+      $('modal').hidden = false;
+    }
+
+    // ---- Modal editar ----
+    function openEdit(id, username, role) {
+      $('modalTitle').textContent = 'Editar usuário';
+      $('userId').value = id;
+      $('fUsername').value = username;
+      $('fPassword').value = '';
+      $('fRole').value = role;
+      $('rowUsername').style.display = 'none'; // username não pode ser alterado
+      $('passwordHint').style.display = '';
+      $('formError').hidden = true;
+      $('modal').hidden = false;
+    }
+
+    // ---- Salvar ----
+    $('btnSave').addEventListener('click', async () => {
+      const id = $('userId').value;
+      const isEdit = !!id;
+      const password = $('fPassword').value;
+      const role = $('fRole').value;
+      const formError = $('formError');
+
+      formError.hidden = true;
+
+      const body = { role };
+      if (!isEdit) body.username = $('fUsername').value.trim().toLowerCase();
+      if (password) body.password = password;
+      if (!isEdit && !body.username) {
+        formError.textContent = 'Nome de usuário é obrigatório.';
+        formError.hidden = false;
+        return;
+      }
+      if (!isEdit && (!password || password.length < 4)) {
+        formError.textContent = 'Senha deve ter ao menos 4 caracteres.';
+        formError.hidden = false;
+        return;
+      }
+
+      const url = isEdit ? `/api/users/${id}` : '/api/users';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        formError.textContent = data.error || 'Erro ao salvar.';
+        formError.hidden = false;
+        return;
+      }
+
+      $('modal').hidden = true;
+      showToast(isEdit ? 'Usuário atualizado!' : 'Usuário criado!');
+      loadUsers();
+    });
+
+    // ---- Confirmar exclusão ----
+    function confirmDelete(id, username) {
+      deleteTargetId = id;
+      $('confirmMessage').textContent = `Excluir o usuário "${username}"? Esta ação não pode ser desfeita.`;
+      $('confirmModal').hidden = false;
+    }
+
+    $('btnConfirmOk').addEventListener('click', async () => {
+      if (!deleteTargetId) return;
+      const res = await fetch(`/api/users/${deleteTargetId}`, { method: 'DELETE' });
+      const data = await res.json();
+      $('confirmModal').hidden = true;
+      deleteTargetId = null;
+      if (!res.ok) { showToast(data.error || 'Erro ao excluir.', 'error'); return; }
+      showToast('Usuário excluído.');
+      loadUsers();
+    });
+
+    // ---- Logout ----
+    $('btnLogout').addEventListener('click', async () => {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.href = '/login.html';
+    });
+
+    // ---- Fechar modais ----
+    document.addEventListener('click', e => {
+      if (e.target.dataset.close) $('modal').hidden = true;
+      if (e.target.dataset.closeConfirm) $('confirmModal').hidden = true;
+    });
+
+    $('btnAdd').addEventListener('click', openCreate);
+
+    // ---- Init ----
+    checkAdmin().then(loadUsers);
+  </script>
+
+</body>
+</html>
