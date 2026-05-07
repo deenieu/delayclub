@@ -9,26 +9,75 @@
 
 const path = require('path');
 const express = require('express');
+const session = require('express-session');
 const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ---- Credenciais de acesso ---------------------------------------------
+// Altere o usuário e a senha conforme necessário
+const USERS = {
+  admin: 'delayclub2025'
+};
+
 // ---- Middlewares globais ------------------------------------------------
-app.use(express.json());  
-app.use(session({ secret: 'troque-por-string-aleatoria', resave: false, saveUninitialized: false, cookie: { httpOnly: true, maxAge: 8 * 60 * 60 * 1000 } }));
-app.use(requireAuth);           // middleware do arquivo .js
-app.use(express.static(...));   // deve vir DEPOIS do requireAuth       
-// app.post('/api/login',  ...);
-app.post('/api/logout', ...);                     // parse de JSON no body
-app.use(express.static(path.join(__dirname, 'public'))); // serve o front
+app.use(express.json());
+
+app.use(session({
+  secret: 'delay-club-secret-key-mude-isso',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    maxAge: 8 * 60 * 60 * 1000  // sessão expira em 8 horas
+  }
+}));
+
+// ---- Middleware de autenticação -----------------------------------------
+function requireAuth(req, res, next) {
+  const publicPaths = ['/login.html', '/api/login', '/styles.css'];
+  if (publicPaths.includes(req.path)) return next();
+
+  if (!req.session || !req.session.user) {
+    if (req.path.startsWith('/api/')) {
+      return res.status(401).json({ error: 'Não autorizado.' });
+    }
+    return res.redirect('/login.html');
+  }
+
+  next();
+}
+
+app.use(requireAuth);
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ---- Rotas de autenticação ----------------------------------------------
+
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body || {};
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Usuário e senha são obrigatórios.' });
+  }
+
+  const expectedPassword = USERS[username.toLowerCase()];
+  if (!expectedPassword || expectedPassword !== password) {
+    return res.status(401).json({ error: 'Usuário ou senha incorretos.' });
+  }
+
+  req.session.user = { username };
+  res.json({ ok: true });
+});
+
+app.post('/api/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.json({ ok: true });
+  });
+});
 
 // ---- Helpers ------------------------------------------------------------
 
-/**
- * Soma N dias a uma data no formato YYYY-MM-DD e devolve outra string YYYY-MM-DD.
- * Trabalhamos sempre em UTC para evitar problemas de fuso horário.
- */
 function addDays(dateStr, days) {
   const [year, month, day] = dateStr.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
@@ -36,15 +85,10 @@ function addDays(dateStr, days) {
   return date.toISOString().slice(0, 10);
 }
 
-/** Retorna a data de hoje no formato YYYY-MM-DD (UTC). */
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-/**
- * Valida o payload de cliente vindo do front.
- * Devolve { ok: true } ou { ok: false, error: '...' }.
- */
 function validateClientPayload(body) {
   if (!body) return { ok: false, error: 'Corpo da requisição vazio.' };
   const { name, lead_owner, payment_date, payment_amount } = body;
@@ -69,10 +113,6 @@ function validateClientPayload(body) {
 
 // ---- Rotas da API -------------------------------------------------------
 
-/**
- * GET /api/clients
- * Lista todos os clientes ordenados pela data de renovação mais próxima.
- */
 app.get('/api/clients', (req, res) => {
   try {
     const rows = db.prepare(`
@@ -87,11 +127,6 @@ app.get('/api/clients', (req, res) => {
   }
 });
 
-/**
- * POST /api/clients
- * Cria um novo cliente. A data de renovação é calculada automaticamente
- * como Data do Pagamento + 30 dias.
- */
 app.post('/api/clients', (req, res) => {
   const check = validateClientPayload(req.body);
   if (!check.ok) return res.status(400).json({ error: check.error });
@@ -119,11 +154,6 @@ app.post('/api/clients', (req, res) => {
   }
 });
 
-/**
- * PUT /api/clients/:id
- * Atualiza um cliente. A data de renovação é recalculada
- * sempre que a data de pagamento muda.
- */
 app.put('/api/clients/:id', (req, res) => {
   const id = Number(req.params.id);
   const check = validateClientPayload(req.body);
@@ -158,10 +188,6 @@ app.put('/api/clients/:id', (req, res) => {
   }
 });
 
-/**
- * DELETE /api/clients/:id
- * Remove um cliente.
- */
 app.delete('/api/clients/:id', (req, res) => {
   const id = Number(req.params.id);
   try {
@@ -176,12 +202,6 @@ app.delete('/api/clients/:id', (req, res) => {
   }
 });
 
-/**
- * POST /api/clients/:id/renew
- * Renova o cliente: a Data do Pagamento vira hoje
- * e a Data de Renovação vira hoje + 30 dias.
- * O valor pago é mantido (poderia ser ajustado no front via edição).
- */
 app.post('/api/clients/:id/renew', (req, res) => {
   const id = Number(req.params.id);
   const newPaymentDate = todayStr();
@@ -205,18 +225,10 @@ app.post('/api/clients/:id/renew', (req, res) => {
   }
 });
 
-/**
- * GET /api/summary
- * Retorna o resumo exibido no topo da tela:
- *  - total de clientes ativos (renovação >= hoje)
- *  - total de clientes vencidos (renovação < hoje)
- *  - total recebido no mês corrente (soma de payment_amount com payment_date no mês atual)
- *  - quantidade de clientes por dono do lead
- */
 app.get('/api/summary', (req, res) => {
   try {
     const today = todayStr();
-    const monthPrefix = today.slice(0, 7); // YYYY-MM
+    const monthPrefix = today.slice(0, 7);
 
     const active = db.prepare(
       'SELECT COUNT(*) AS c FROM clients WHERE renewal_date >= ?'
@@ -237,12 +249,7 @@ app.get('/api/summary', (req, res) => {
       ORDER BY count DESC, lead_owner ASC
     `).all();
 
-    res.json({
-      active,
-      expired,
-      monthlyTotal,
-      byOwner
-    });
+    res.json({ active, expired, monthlyTotal, byOwner });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao gerar resumo.' });
