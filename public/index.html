@@ -5,12 +5,39 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Delay Club Manager</title>
 
-  <!-- Tipografia: Fraunces (serifa para o brand) + Inter Tight (corpo) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .topbar__nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .nav-link {
+      font-size: 13px;
+      color: var(--gold-soft);
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      font-weight: 500;
+      background: none;
+      cursor: pointer;
+      font-family: var(--font-body);
+    }
+    .nav-link:hover { border-color: var(--gold); color: var(--gold); }
+    .nav-link--active { border-color: var(--gold); color: var(--gold); }
+    .nav-link--admin { display: none; } /* escondido até confirmar que é admin */
+    .nav-separator {
+      width: 1px;
+      height: 16px;
+      background: #2e3a55;
+    }
+  </style>
 </head>
 <body>
 
@@ -24,6 +51,14 @@
           <span></span>
         </div>
       </div>
+
+      <div class="topbar__nav">
+        <a href="/" class="nav-link nav-link--active">Clientes</a>
+        <a href="/usuarios.html" class="nav-link nav-link--admin" id="navUsuarios">Usuários</a>
+        <div class="nav-separator"></div>
+        <button class="nav-link" id="btnLogout">Sair</button>
+      </div>
+
       <div class="topbar__date" id="topbarDate">—</div>
     </div>
   </header>
@@ -86,7 +121,6 @@
 
     <!-- =============== LISTA DE CLIENTES =============== -->
     <section class="list-wrapper">
-      <!-- Versão tabela (desktop) -->
       <table class="clients-table" id="clientsTable">
         <thead>
           <tr>
@@ -99,15 +133,10 @@
             <th class="th-actions">Ações</th>
           </tr>
         </thead>
-        <tbody id="clientsTbody">
-          <!-- preenchido por JS -->
-        </tbody>
+        <tbody id="clientsTbody"></tbody>
       </table>
 
-      <!-- Versão cards (mobile) -->
-      <div class="clients-cards" id="clientsCards">
-        <!-- preenchido por JS -->
-      </div>
+      <div class="clients-cards" id="clientsCards"></div>
 
       <div class="empty-state" id="emptyState" hidden>
         <p>Nenhum cliente encontrado com os filtros atuais.</p>
@@ -188,6 +217,24 @@
 
   <!-- =============== TOAST =============== -->
   <div class="toast" id="toast" hidden></div>
+
+  <script>
+    // Mostra o link de Usuários apenas para admins
+    fetch('/api/me')
+      .then(r => r.json())
+      .then(user => {
+        if (user.role === 'admin') {
+          document.getElementById('navUsuarios').style.display = '';
+        }
+      })
+      .catch(() => {});
+
+    // Logout
+    document.getElementById('btnLogout').addEventListener('click', async () => {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.href = '/login.html';
+    });
+  </script>
 
   <script src="/app.js"></script>
 </body>
