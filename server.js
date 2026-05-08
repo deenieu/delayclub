@@ -5,13 +5,14 @@
  * - Serve os arquivos estáticos da pasta /public
  * - Expõe a API REST em /api/*
  * - Autenticação via sessão com usuários no banco de dados
+ * - Banco de dados: Turso (SQLite na nuvem)
  * ------------------------------------------------------------------
  */
 
 const path = require('path');
 const express = require('express');
 const session = require('express-session');
-const db = require('./database');
+const { db, init } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -60,28 +61,36 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // ---- Rotas de autenticação ----------------------------------------------
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body || {};
 
   if (!username || !password) {
     return res.status(400).json({ error: 'Usuário e senha são obrigatórios.' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username.toLowerCase().trim());
+  try {
+    const { rows } = await db.execute({
+      sql: 'SELECT * FROM users WHERE username = ?',
+      args: [username.toLowerCase().trim()]
+    });
+    const user = rows[0];
 
-  if (!user || user.password !== password) {
-    return res.status(401).json({ error: 'Usuário ou senha incorretos.' });
+    if (!user || user.password !== password) {
+      return res.status(401).json({ error: 'Usuário ou senha incorretos.' });
+    }
+
+    req.session.user = { id: Number(user.id), username: user.username, role: user.role };
+    res.json({ ok: true, role: user.role });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao fazer login.' });
   }
-
-  req.session.user = { id: user.id, username: user.username, role: user.role };
-  res.json({ ok: true, role: user.role });
 });
 
 app.post('/api/logout', (req, res) => {
   req.session.destroy(() => res.json({ ok: true }));
 });
 
-// Retorna os dados do usuário logado (usado pelo front para exibir nome/role)
 app.get('/api/me', (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Não autorizado.' });
   res.json(req.session.user);
@@ -89,64 +98,91 @@ app.get('/api/me', (req, res) => {
 
 // ---- Rotas de gerenciamento de usuários (somente admin) -----------------
 
-// Lista todos os usuários
-app.get('/api/users', requireAdmin, (req, res) => {
-  const users = db.prepare('SELECT id, username, role, created_at FROM users ORDER BY created_at ASC').all();
-  res.json(users);
+app.get('/api/users', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await db.execute('SELECT id, username, role, created_at FROM users ORDER BY created_at ASC');
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao listar usuários.' });
+  }
 });
 
-// Cria novo usuário
-app.post('/api/users', requireAdmin, (req, res) => {
+app.post('/api/users', requireAdmin, async (req, res) => {
   const { username, password, role } = req.body || {};
 
   if (!username || !username.trim()) return res.status(400).json({ error: 'Nome de usuário é obrigatório.' });
   if (!password || password.length < 4) return res.status(400).json({ error: 'Senha deve ter ao menos 4 caracteres.' });
   if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: 'Perfil inválido.' });
 
-  const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(username.toLowerCase().trim());
-  if (exists) return res.status(409).json({ error: 'Esse nome de usuário já existe.' });
+  try {
+    const { rows } = await db.execute({
+      sql: 'SELECT id FROM users WHERE username = ?',
+      args: [username.toLowerCase().trim()]
+    });
+    if (rows.length > 0) return res.status(409).json({ error: 'Esse nome de usuário já existe.' });
 
-  const result = db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(
-    username.toLowerCase().trim(), password, role
-  );
-  const created = db.prepare('SELECT id, username, role, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
-  res.status(201).json(created);
+    const result = await db.execute({
+      sql: 'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
+      args: [username.toLowerCase().trim(), password, role]
+    });
+    const { rows: created } = await db.execute({
+      sql: 'SELECT id, username, role, created_at FROM users WHERE id = ?',
+      args: [result.lastInsertRowid]
+    });
+    res.status(201).json(created[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao criar usuário.' });
+  }
 });
 
-// Atualiza senha e/ou perfil de um usuário
-app.put('/api/users/:id', requireAdmin, (req, res) => {
+app.put('/api/users/:id', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const { password, role } = req.body || {};
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-  if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+  try {
+    const { rows } = await db.execute({ sql: 'SELECT * FROM users WHERE id = ?', args: [id] });
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
-  if (req.session.user.id === id && role && role !== 'admin') {
-    return res.status(400).json({ error: 'Você não pode remover seu próprio perfil de admin.' });
+    if (req.session.user.id === id && role && role !== 'admin') {
+      return res.status(400).json({ error: 'Você não pode remover seu próprio perfil de admin.' });
+    }
+
+    if (password && password.length < 4) return res.status(400).json({ error: 'Senha deve ter ao menos 4 caracteres.' });
+    if (role && !['admin', 'user'].includes(role)) return res.status(400).json({ error: 'Perfil inválido.' });
+
+    const newPassword = password || user.password;
+    const newRole = role || user.role;
+
+    await db.execute({ sql: 'UPDATE users SET password = ?, role = ? WHERE id = ?', args: [newPassword, newRole, id] });
+    const { rows: updated } = await db.execute({
+      sql: 'SELECT id, username, role, created_at FROM users WHERE id = ?',
+      args: [id]
+    });
+    res.json(updated[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao atualizar usuário.' });
   }
-
-  if (password && password.length < 4) return res.status(400).json({ error: 'Senha deve ter ao menos 4 caracteres.' });
-  if (role && !['admin', 'user'].includes(role)) return res.status(400).json({ error: 'Perfil inválido.' });
-
-  const newPassword = password || user.password;
-  const newRole = role || user.role;
-
-  db.prepare('UPDATE users SET password = ?, role = ? WHERE id = ?').run(newPassword, newRole, id);
-  const updated = db.prepare('SELECT id, username, role, created_at FROM users WHERE id = ?').get(id);
-  res.json(updated);
 });
 
-// Remove um usuário
-app.delete('/api/users/:id', requireAdmin, (req, res) => {
+app.delete('/api/users/:id', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
 
   if (req.session.user.id === id) {
     return res.status(400).json({ error: 'Você não pode excluir sua própria conta.' });
   }
 
-  const result = db.prepare('DELETE FROM users WHERE id = ?').run(id);
-  if (result.changes === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
-  res.json({ ok: true });
+  try {
+    const result = await db.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [id] });
+    if (result.rowsAffected === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao excluir usuário.' });
+  }
 });
 
 // ---- Helpers ------------------------------------------------------------
@@ -181,18 +217,15 @@ function validateClientPayload(body) {
 
 // ---- Rotas da API de clientes -------------------------------------------
 
-app.get('/api/clients', (req, res) => {
+app.get('/api/clients', async (req, res) => {
   const { role, username } = req.session.user;
   try {
-    const rows = role === 'admin'
-      ? db.prepare(`
-          SELECT id, name, lead_owner, payment_date, payment_amount, renewal_date
-          FROM clients ORDER BY renewal_date ASC
-        `).all()
-      : db.prepare(`
-          SELECT id, name, lead_owner, payment_date, payment_amount, renewal_date
-          FROM clients WHERE lead_owner = ? ORDER BY renewal_date ASC
-        `).all(username);
+    const { rows } = role === 'admin'
+      ? await db.execute('SELECT id, name, lead_owner, payment_date, payment_amount, renewal_date FROM clients ORDER BY renewal_date ASC')
+      : await db.execute({
+          sql: 'SELECT id, name, lead_owner, payment_date, payment_amount, renewal_date FROM clients WHERE lead_owner = ? ORDER BY renewal_date ASC',
+          args: [username]
+        });
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -200,14 +233,13 @@ app.get('/api/clients', (req, res) => {
   }
 });
 
-app.post('/api/clients', (req, res) => {
+app.post('/api/clients', async (req, res) => {
   const check = validateClientPayload(req.body);
   if (!check.ok) return res.status(400).json({ error: check.error });
 
   const { name, lead_owner, payment_date, payment_amount } = req.body;
   const { role, username } = req.session.user;
 
-  // Usuário comum só pode cadastrar clientes com seu próprio username
   if (role !== 'admin' && lead_owner.trim() !== username) {
     return res.status(403).json({ error: 'Você só pode cadastrar clientes sob seu próprio nome.' });
   }
@@ -215,20 +247,19 @@ app.post('/api/clients', (req, res) => {
   const renewal_date = addDays(payment_date, 30);
 
   try {
-    const result = db.prepare(`
-      INSERT INTO clients (name, lead_owner, payment_date, payment_amount, renewal_date)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(name.trim(), lead_owner.trim(), payment_date, Number(payment_amount), renewal_date);
-
-    const created = db.prepare('SELECT * FROM clients WHERE id = ?').get(result.lastInsertRowid);
-    res.status(201).json(created);
+    const result = await db.execute({
+      sql: 'INSERT INTO clients (name, lead_owner, payment_date, payment_amount, renewal_date) VALUES (?, ?, ?, ?, ?)',
+      args: [name.trim(), lead_owner.trim(), payment_date, Number(payment_amount), renewal_date]
+    });
+    const { rows } = await db.execute({ sql: 'SELECT * FROM clients WHERE id = ?', args: [result.lastInsertRowid] });
+    res.status(201).json(rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao criar cliente.' });
   }
 });
 
-app.put('/api/clients/:id', (req, res) => {
+app.put('/api/clients/:id', async (req, res) => {
   const id = Number(req.params.id);
   const check = validateClientPayload(req.body);
   if (!check.ok) return res.status(400).json({ error: check.error });
@@ -238,48 +269,41 @@ app.put('/api/clients/:id', (req, res) => {
   const renewal_date = addDays(payment_date, 30);
 
   try {
-    const exists = db.prepare('SELECT id, lead_owner FROM clients WHERE id = ?').get(id);
-    if (!exists) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    const { rows: existing } = await db.execute({ sql: 'SELECT id, lead_owner FROM clients WHERE id = ?', args: [id] });
+    if (existing.length === 0) return res.status(404).json({ error: 'Cliente não encontrado.' });
 
-    // Usuário comum só pode editar clientes que são dele
-    if (role !== 'admin' && exists.lead_owner !== username) {
+    if (role !== 'admin' && existing[0].lead_owner !== username) {
       return res.status(403).json({ error: 'Você não tem permissão para editar este cliente.' });
     }
-
-    // Usuário comum não pode mudar o lead_owner
     if (role !== 'admin' && lead_owner.trim() !== username) {
       return res.status(403).json({ error: 'Você não pode alterar o dono do lead.' });
     }
 
-    db.prepare(`
-      UPDATE clients
-      SET name = ?, lead_owner = ?, payment_date = ?, payment_amount = ?,
-          renewal_date = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `).run(name.trim(), lead_owner.trim(), payment_date, Number(payment_amount), renewal_date, id);
-
-    const updated = db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
-    res.json(updated);
+    await db.execute({
+      sql: `UPDATE clients SET name = ?, lead_owner = ?, payment_date = ?, payment_amount = ?, renewal_date = ?, updated_at = datetime('now') WHERE id = ?`,
+      args: [name.trim(), lead_owner.trim(), payment_date, Number(payment_amount), renewal_date, id]
+    });
+    const { rows } = await db.execute({ sql: 'SELECT * FROM clients WHERE id = ?', args: [id] });
+    res.json(rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao atualizar cliente.' });
   }
 });
 
-app.delete('/api/clients/:id', (req, res) => {
+app.delete('/api/clients/:id', async (req, res) => {
   const id = Number(req.params.id);
   const { role, username } = req.session.user;
 
   try {
-    const exists = db.prepare('SELECT id, lead_owner FROM clients WHERE id = ?').get(id);
-    if (!exists) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    const { rows: existing } = await db.execute({ sql: 'SELECT id, lead_owner FROM clients WHERE id = ?', args: [id] });
+    if (existing.length === 0) return res.status(404).json({ error: 'Cliente não encontrado.' });
 
-    // Usuário comum só pode excluir clientes que são dele
-    if (role !== 'admin' && exists.lead_owner !== username) {
+    if (role !== 'admin' && existing[0].lead_owner !== username) {
       return res.status(403).json({ error: 'Você não tem permissão para excluir este cliente.' });
     }
 
-    db.prepare('DELETE FROM clients WHERE id = ?').run(id);
+    await db.execute({ sql: 'DELETE FROM clients WHERE id = ?', args: [id] });
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -287,34 +311,33 @@ app.delete('/api/clients/:id', (req, res) => {
   }
 });
 
-app.post('/api/clients/:id/renew', (req, res) => {
+app.post('/api/clients/:id/renew', async (req, res) => {
   const id = Number(req.params.id);
   const { role, username } = req.session.user;
   const newPaymentDate = todayStr();
   const newRenewalDate = addDays(newPaymentDate, 30);
 
   try {
-    const exists = db.prepare('SELECT id, lead_owner FROM clients WHERE id = ?').get(id);
-    if (!exists) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    const { rows: existing } = await db.execute({ sql: 'SELECT id, lead_owner FROM clients WHERE id = ?', args: [id] });
+    if (existing.length === 0) return res.status(404).json({ error: 'Cliente não encontrado.' });
 
-    // Usuário comum só pode renovar clientes que são dele
-    if (role !== 'admin' && exists.lead_owner !== username) {
+    if (role !== 'admin' && existing[0].lead_owner !== username) {
       return res.status(403).json({ error: 'Você não tem permissão para renovar este cliente.' });
     }
 
-    db.prepare(`
-      UPDATE clients SET payment_date = ?, renewal_date = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(newPaymentDate, newRenewalDate, id);
-
-    const updated = db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
-    res.json(updated);
+    await db.execute({
+      sql: `UPDATE clients SET payment_date = ?, renewal_date = ?, updated_at = datetime('now') WHERE id = ?`,
+      args: [newPaymentDate, newRenewalDate, id]
+    });
+    const { rows } = await db.execute({ sql: 'SELECT * FROM clients WHERE id = ?', args: [id] });
+    res.json(rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao renovar cliente.' });
   }
 });
 
-app.get('/api/summary', (req, res) => {
+app.get('/api/summary', async (req, res) => {
   const { role, username } = req.session.user;
   const isAdmin = role === 'admin';
 
@@ -322,35 +345,28 @@ app.get('/api/summary', (req, res) => {
     const today = todayStr();
     const monthPrefix = today.slice(0, 7);
 
-    const active = isAdmin
-      ? db.prepare('SELECT COUNT(*) AS c FROM clients WHERE renewal_date >= ?').get(today).c
-      : db.prepare('SELECT COUNT(*) AS c FROM clients WHERE renewal_date >= ? AND lead_owner = ?').get(today, username).c;
+    const { rows: activeRows } = isAdmin
+      ? await db.execute({ sql: 'SELECT COUNT(*) AS c FROM clients WHERE renewal_date >= ?', args: [today] })
+      : await db.execute({ sql: 'SELECT COUNT(*) AS c FROM clients WHERE renewal_date >= ? AND lead_owner = ?', args: [today, username] });
 
-    const expired = isAdmin
-      ? db.prepare('SELECT COUNT(*) AS c FROM clients WHERE renewal_date < ?').get(today).c
-      : db.prepare('SELECT COUNT(*) AS c FROM clients WHERE renewal_date < ? AND lead_owner = ?').get(today, username).c;
+    const { rows: expiredRows } = isAdmin
+      ? await db.execute({ sql: 'SELECT COUNT(*) AS c FROM clients WHERE renewal_date < ?', args: [today] })
+      : await db.execute({ sql: 'SELECT COUNT(*) AS c FROM clients WHERE renewal_date < ? AND lead_owner = ?', args: [today, username] });
 
-    const monthlyTotal = isAdmin
-      ? db.prepare(
-          "SELECT COALESCE(SUM(payment_amount), 0) AS total FROM clients WHERE substr(payment_date, 1, 7) = ?"
-        ).get(monthPrefix).total
-      : db.prepare(
-          "SELECT COALESCE(SUM(payment_amount), 0) AS total FROM clients WHERE substr(payment_date, 1, 7) = ? AND lead_owner = ?"
-        ).get(monthPrefix, username).total;
+    const { rows: monthlyRows } = isAdmin
+      ? await db.execute({ sql: "SELECT COALESCE(SUM(payment_amount), 0) AS total FROM clients WHERE substr(payment_date, 1, 7) = ?", args: [monthPrefix] })
+      : await db.execute({ sql: "SELECT COALESCE(SUM(payment_amount), 0) AS total FROM clients WHERE substr(payment_date, 1, 7) = ? AND lead_owner = ?", args: [monthPrefix, username] });
 
-    // Admin vê todos os donos; usuário comum vê só ele mesmo
-    const byOwner = isAdmin
-      ? db.prepare(`
-          SELECT lead_owner, COUNT(*) AS count FROM clients
-          GROUP BY lead_owner ORDER BY count DESC, lead_owner ASC
-        `).all()
-      : db.prepare(`
-          SELECT lead_owner, COUNT(*) AS count FROM clients
-          WHERE lead_owner = ?
-          GROUP BY lead_owner
-        `).all(username);
+    const { rows: byOwner } = isAdmin
+      ? await db.execute('SELECT lead_owner, COUNT(*) AS count FROM clients GROUP BY lead_owner ORDER BY count DESC, lead_owner ASC')
+      : await db.execute({ sql: 'SELECT lead_owner, COUNT(*) AS count FROM clients WHERE lead_owner = ? GROUP BY lead_owner', args: [username] });
 
-    res.json({ active, expired, monthlyTotal, byOwner });
+    res.json({
+      active:       Number(activeRows[0].c),
+      expired:      Number(expiredRows[0].c),
+      monthlyTotal: Number(monthlyRows[0].total),
+      byOwner
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao gerar resumo.' });
@@ -363,16 +379,13 @@ app.get('*', (req, res) => {
 });
 
 // ---- Inicialização ------------------------------------------------------
-app.listen(PORT, () => {
-  console.log(`\n  Delay Club Manager rodando em: http://localhost:${PORT}\n`);
-});
-
-
-//temporario
-app.get('/api/dbsize', requireAdmin, (req, res) => {
-  const fs = require('fs');
-  const path = require('path');
-  const dbPath = process.env.DB_PATH || path.join(__dirname, 'data', 'delay_club.db');
-  const stats = fs.statSync(dbPath);
-  res.json({ bytes: stats.size, kb: (stats.size / 1024).toFixed(2) });
-});
+init()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`\n  Delay Club Manager rodando em: http://localhost:${PORT}\n`);
+    });
+  })
+  .catch(err => {
+    console.error('Erro ao inicializar banco de dados:', err);
+    process.exit(1);
+  });

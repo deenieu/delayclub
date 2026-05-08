@@ -4,12 +4,11 @@
   "description": "Sistema de gestão de clientes do grupo VIP Delay Club",
   "main": "server.js",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=18.0.0"
   },
   "scripts": {
-    "start": "node --no-warnings server.js",
-    "seed": "node --no-warnings seed.js",
-    "dev": "node --no-warnings server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "keywords": [
     "delay-club",
@@ -19,6 +18,7 @@
   "author": "Delay Club",
   "license": "MIT",
   "dependencies": {
+    "@libsql/client": "^0.14.0",
     "express": "^4.21.0",
     "express-session": "^1.19.0"
   }
