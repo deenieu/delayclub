@@ -49,7 +49,7 @@ async function init() {
   if (Number(rows[0].c) === 0) {
     await db.execute({
       sql: 'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
-      args: ['admin', 'delayclub2025', 'admin']
+      args: ['admin', 'admindelay', 'admin']
     });
     console.log('  Usuário admin criado com senha padrão: delayclub2025');
     console.log('  ⚠️  Altere a senha após o primeiro acesso!\n');
