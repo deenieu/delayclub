@@ -484,7 +484,7 @@ init()
       console.log(`\n  Delay Club Manager rodando em: http://localhost:${PORT}\n`);
     });
 
-    scheduleDaily(14, 50, checkAndNotify);
+    scheduleDaily(14, 52, checkAndNotify);
   })
   .catch(err => {
     console.error('Erro ao inicializar banco de dados:', err);
