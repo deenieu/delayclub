@@ -121,7 +121,6 @@ app.put('/api/users/:id', requireAdmin, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
-  // Impede que o admin remova seu próprio papel de admin
   if (req.session.user.id === id && role && role !== 'admin') {
     return res.status(400).json({ error: 'Você não pode remover seu próprio perfil de admin.' });
   }
@@ -183,11 +182,17 @@ function validateClientPayload(body) {
 // ---- Rotas da API de clientes -------------------------------------------
 
 app.get('/api/clients', (req, res) => {
+  const { role, username } = req.session.user;
   try {
-    const rows = db.prepare(`
-      SELECT id, name, lead_owner, payment_date, payment_amount, renewal_date
-      FROM clients ORDER BY renewal_date ASC
-    `).all();
+    const rows = role === 'admin'
+      ? db.prepare(`
+          SELECT id, name, lead_owner, payment_date, payment_amount, renewal_date
+          FROM clients ORDER BY renewal_date ASC
+        `).all()
+      : db.prepare(`
+          SELECT id, name, lead_owner, payment_date, payment_amount, renewal_date
+          FROM clients WHERE lead_owner = ? ORDER BY renewal_date ASC
+        `).all(username);
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -200,6 +205,13 @@ app.post('/api/clients', (req, res) => {
   if (!check.ok) return res.status(400).json({ error: check.error });
 
   const { name, lead_owner, payment_date, payment_amount } = req.body;
+  const { role, username } = req.session.user;
+
+  // Usuário comum só pode cadastrar clientes com seu próprio username
+  if (role !== 'admin' && lead_owner.trim() !== username) {
+    return res.status(403).json({ error: 'Você só pode cadastrar clientes sob seu próprio nome.' });
+  }
+
   const renewal_date = addDays(payment_date, 30);
 
   try {
@@ -222,11 +234,22 @@ app.put('/api/clients/:id', (req, res) => {
   if (!check.ok) return res.status(400).json({ error: check.error });
 
   const { name, lead_owner, payment_date, payment_amount } = req.body;
+  const { role, username } = req.session.user;
   const renewal_date = addDays(payment_date, 30);
 
   try {
-    const exists = db.prepare('SELECT id FROM clients WHERE id = ?').get(id);
+    const exists = db.prepare('SELECT id, lead_owner FROM clients WHERE id = ?').get(id);
     if (!exists) return res.status(404).json({ error: 'Cliente não encontrado.' });
+
+    // Usuário comum só pode editar clientes que são dele
+    if (role !== 'admin' && exists.lead_owner !== username) {
+      return res.status(403).json({ error: 'Você não tem permissão para editar este cliente.' });
+    }
+
+    // Usuário comum não pode mudar o lead_owner
+    if (role !== 'admin' && lead_owner.trim() !== username) {
+      return res.status(403).json({ error: 'Você não pode alterar o dono do lead.' });
+    }
 
     db.prepare(`
       UPDATE clients
@@ -245,9 +268,18 @@ app.put('/api/clients/:id', (req, res) => {
 
 app.delete('/api/clients/:id', (req, res) => {
   const id = Number(req.params.id);
+  const { role, username } = req.session.user;
+
   try {
-    const result = db.prepare('DELETE FROM clients WHERE id = ?').run(id);
-    if (result.changes === 0) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    const exists = db.prepare('SELECT id, lead_owner FROM clients WHERE id = ?').get(id);
+    if (!exists) return res.status(404).json({ error: 'Cliente não encontrado.' });
+
+    // Usuário comum só pode excluir clientes que são dele
+    if (role !== 'admin' && exists.lead_owner !== username) {
+      return res.status(403).json({ error: 'Você não tem permissão para excluir este cliente.' });
+    }
+
+    db.prepare('DELETE FROM clients WHERE id = ?').run(id);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -257,12 +289,18 @@ app.delete('/api/clients/:id', (req, res) => {
 
 app.post('/api/clients/:id/renew', (req, res) => {
   const id = Number(req.params.id);
+  const { role, username } = req.session.user;
   const newPaymentDate = todayStr();
   const newRenewalDate = addDays(newPaymentDate, 30);
 
   try {
-    const exists = db.prepare('SELECT id FROM clients WHERE id = ?').get(id);
+    const exists = db.prepare('SELECT id, lead_owner FROM clients WHERE id = ?').get(id);
     if (!exists) return res.status(404).json({ error: 'Cliente não encontrado.' });
+
+    // Usuário comum só pode renovar clientes que são dele
+    if (role !== 'admin' && exists.lead_owner !== username) {
+      return res.status(403).json({ error: 'Você não tem permissão para renovar este cliente.' });
+    }
 
     db.prepare(`
       UPDATE clients SET payment_date = ?, renewal_date = ?, updated_at = datetime('now') WHERE id = ?
@@ -277,19 +315,40 @@ app.post('/api/clients/:id/renew', (req, res) => {
 });
 
 app.get('/api/summary', (req, res) => {
+  const { role, username } = req.session.user;
+  const isAdmin = role === 'admin';
+
   try {
     const today = todayStr();
     const monthPrefix = today.slice(0, 7);
 
-    const active = db.prepare('SELECT COUNT(*) AS c FROM clients WHERE renewal_date >= ?').get(today).c;
-    const expired = db.prepare('SELECT COUNT(*) AS c FROM clients WHERE renewal_date < ?').get(today).c;
-    const monthlyTotal = db.prepare(
-      "SELECT COALESCE(SUM(payment_amount), 0) AS total FROM clients WHERE substr(payment_date, 1, 7) = ?"
-    ).get(monthPrefix).total;
-    const byOwner = db.prepare(`
-      SELECT lead_owner, COUNT(*) AS count FROM clients
-      GROUP BY lead_owner ORDER BY count DESC, lead_owner ASC
-    `).all();
+    const active = isAdmin
+      ? db.prepare('SELECT COUNT(*) AS c FROM clients WHERE renewal_date >= ?').get(today).c
+      : db.prepare('SELECT COUNT(*) AS c FROM clients WHERE renewal_date >= ? AND lead_owner = ?').get(today, username).c;
+
+    const expired = isAdmin
+      ? db.prepare('SELECT COUNT(*) AS c FROM clients WHERE renewal_date < ?').get(today).c
+      : db.prepare('SELECT COUNT(*) AS c FROM clients WHERE renewal_date < ? AND lead_owner = ?').get(today, username).c;
+
+    const monthlyTotal = isAdmin
+      ? db.prepare(
+          "SELECT COALESCE(SUM(payment_amount), 0) AS total FROM clients WHERE substr(payment_date, 1, 7) = ?"
+        ).get(monthPrefix).total
+      : db.prepare(
+          "SELECT COALESCE(SUM(payment_amount), 0) AS total FROM clients WHERE substr(payment_date, 1, 7) = ? AND lead_owner = ?"
+        ).get(monthPrefix, username).total;
+
+    // Admin vê todos os donos; usuário comum vê só ele mesmo
+    const byOwner = isAdmin
+      ? db.prepare(`
+          SELECT lead_owner, COUNT(*) AS count FROM clients
+          GROUP BY lead_owner ORDER BY count DESC, lead_owner ASC
+        `).all()
+      : db.prepare(`
+          SELECT lead_owner, COUNT(*) AS count FROM clients
+          WHERE lead_owner = ?
+          GROUP BY lead_owner
+        `).all(username);
 
     res.json({ active, expired, monthlyTotal, byOwner });
   } catch (err) {
