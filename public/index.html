@@ -14,7 +14,7 @@
     .topbar__nav {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 14px;
     }
     .nav-link {
       font-size: 13px;
@@ -56,12 +56,10 @@
         <a href="/" class="nav-link nav-link--active">Clientes</a>
         <a href="/usuarios.html" class="nav-link nav-link--admin" id="navUsuarios">Usuários</a>
         <div class="nav-separator"></div>
-        <button class="btn-theme" id="btnTheme" title="Alternar tema">🌙</button>
-        <div class="nav-separator"></div>
         <button class="nav-link" id="btnLogout">Sair</button>
+        <div class="nav-separator"></div>
+        <button class="btn-theme" id="btnTheme" title="Alternar tema">🌙</button>
       </div>
-
-      <div class="topbar__date" id="topbarDate">—</div>
     </div>
   </header>
 
@@ -232,7 +230,6 @@
       localStorage.setItem('dc-theme', theme);
     }
 
-    // Carrega preferência salva ou usa preferência do sistema
     const saved = localStorage.getItem('dc-theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     applyTheme(saved || (prefersDark ? 'dark' : 'light'));

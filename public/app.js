@@ -20,8 +20,6 @@ const state = {
 const $ = (sel) => document.querySelector(sel);
 
 const els = {
-  topbarDate:    $('#topbarDate'),
-
   sumActive:     $('#sumActive'),
   sumExpired:    $('#sumExpired'),
   sumMonthly:    $('#sumMonthly'),
@@ -497,16 +495,7 @@ function bindEvents() {
 // BOOT
 // =====================================================================
 
-function setTopbarDate() {
-  const d = new Date();
-  const fmt = new Intl.DateTimeFormat('pt-BR', {
-    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
-  });
-  els.topbarDate.textContent = fmt.format(d);
-}
-
 document.addEventListener('DOMContentLoaded', async () => {
-  setTopbarDate();
   bindEvents();
 
   // Carrega o usuário logado uma única vez.
