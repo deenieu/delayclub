@@ -180,7 +180,6 @@ function renderOwnerFilter() {
   els.filterOwner.innerHTML =
     '<option value="">Todos</option>' +
     owners.map(o => `<option value="${escapeAttr(o)}">${escapeHTML(o)}</option>`).join('');
-  // Se o dono filtrado ainda existir, mantém a seleção
   if (owners.includes(current)) els.filterOwner.value = current;
   else state.filters.owner = '';
 }
@@ -295,13 +294,19 @@ function openModal(client = null) {
   } else {
     els.clientForm.reset();
     els.clientId.value = '';
-    els.fPaymentDate.value = todayISO(); // novo cliente: pagamento = hoje por padrão
-
-    // Pré-preenche o dono do lead com o usuário logado
+    els.fPaymentDate.value = todayISO();
     if (state.currentUser) {
       els.fOwner.value = state.currentUser.username;
     }
   }
+
+  // Admin pode editar o campo livremente; usuário comum fica sempre travado
+  if (state.currentUser?.role === 'admin') {
+    els.fOwner.removeAttribute('readonly');
+  } else {
+    els.fOwner.setAttribute('readonly', true);
+  }
+
   updateRenewalPreview();
   els.modal.hidden = false;
   setTimeout(() => els.fName.focus(), 50);
@@ -334,7 +339,6 @@ async function handleSubmit(e) {
     payment_amount: Number(els.fAmount.value)
   };
 
-  // Validação básica no client (o servidor revalida)
   if (!payload.name || !payload.lead_owner || !payload.payment_date || isNaN(payload.payment_amount)) {
     els.formError.textContent = 'Preencha todos os campos obrigatórios.';
     els.formError.hidden = false;
