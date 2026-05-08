@@ -6,12 +6,14 @@
  * - Expõe a API REST em /api/*
  * - Autenticação via sessão com usuários no banco de dados
  * - Banco de dados: Turso (SQLite na nuvem)
+ * - Notificações WhatsApp via Twilio
  * ------------------------------------------------------------------
  */
 
 const path = require('path');
 const express = require('express');
 const session = require('express-session');
+const https = require('https');
 const { db, init } = require('./database');
 
 const app = express();
@@ -373,6 +375,103 @@ app.get('/api/summary', async (req, res) => {
   }
 });
 
+// ---- Notificações WhatsApp via Twilio -----------------------------------
+
+function sendWhatsApp(message) {
+  return new Promise((resolve, reject) => {
+    const sid   = process.env.TWILIO_ACCOUNT_SID;
+    const token = process.env.TWILIO_AUTH_TOKEN;
+    const from  = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
+    const to    = process.env.NOTIFY_WHATSAPP_TO;
+
+    if (!sid || !token || !to) {
+      console.warn('  Twilio não configurado — notificação ignorada.');
+      return resolve();
+    }
+
+    const body = new URLSearchParams({
+      From: from,
+      To:   `whatsapp:${to}`,
+      Body: message
+    }).toString();
+
+    const options = {
+      hostname: 'api.twilio.com',
+      path:     `/2010-04-01/Accounts/${sid}/Messages.json`,
+      method:   'POST',
+      headers: {
+        'Content-Type':   'application/x-www-form-urlencoded',
+        'Authorization':  'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'),
+        'Content-Length': Buffer.byteLength(body)
+      }
+    };
+
+    const req = https.request(options, res => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log('  ✅ WhatsApp enviado com sucesso.');
+          resolve();
+        } else {
+          console.error('  ❌ Erro Twilio:', data);
+          reject(new Error(data));
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+async function checkAndNotify() {
+  console.log('  🔔 Verificando clientes vencendo amanhã...');
+  try {
+    const tomorrow = addDays(todayStr(), 1);
+    const { rows } = await db.execute({
+      sql: 'SELECT name, lead_owner, renewal_date FROM clients WHERE renewal_date = ? ORDER BY name ASC',
+      args: [tomorrow]
+    });
+
+    if (rows.length === 0) {
+      console.log('  Nenhum cliente vencendo amanhã.');
+      return;
+    }
+
+    const lista = rows.map(c => `• ${c.name} (${c.lead_owner})`).join('\n');
+    const mensagem =
+      `⚠️ *Delay Club — Renovações de amanhã (${tomorrow.split('-').reverse().join('/')})*\n\n` +
+      `${lista}\n\n` +
+      `Total: ${rows.length} cliente(s)`;
+
+    await sendWhatsApp(mensagem);
+  } catch (err) {
+    console.error('  Erro ao verificar notificações:', err);
+  }
+}
+
+// Agenda o job para rodar todo dia às 08:00 (horário do servidor)
+// Para alterar: scheduleDaily(HORA, MINUTO, checkAndNotify)
+// Exemplo: scheduleDaily(9, 30, checkAndNotify) → roda às 09:30
+function scheduleDaily(hour, minute, fn) {
+  function getNextDelay() {
+    const now = new Date();
+    const next = new Date();
+    next.setHours(hour, minute, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next - now;
+  }
+
+  function loop() {
+    setTimeout(() => { fn(); loop(); }, getNextDelay());
+  }
+
+  loop();
+  console.log(`  📅 Notificações agendadas para ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')} todo dia.`);
+}
+
 // ---- Fallback para SPA --------------------------------------------------
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -384,6 +483,8 @@ init()
     app.listen(PORT, () => {
       console.log(`\n  Delay Club Manager rodando em: http://localhost:${PORT}\n`);
     });
+
+    scheduleDaily(14, 50, checkAndNotify);
   })
   .catch(err => {
     console.error('Erro ao inicializar banco de dados:', err);
