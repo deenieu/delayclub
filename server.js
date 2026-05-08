@@ -366,3 +366,13 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n  Delay Club Manager rodando em: http://localhost:${PORT}\n`);
 });
+
+
+//temporario
+app.get('/api/dbsize', requireAdmin, (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  const dbPath = process.env.DB_PATH || path.join(__dirname, 'data', 'delay_club.db');
+  const stats = fs.statSync(dbPath);
+  res.json({ bytes: stats.size, kb: (stats.size / 1024).toFixed(2) });
+});
