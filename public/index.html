@@ -31,11 +31,11 @@
     }
     .nav-link:hover { border-color: var(--gold); color: var(--gold); }
     .nav-link--active { border-color: var(--gold); color: var(--gold); }
-    .nav-link--admin { display: none; } /* escondido até confirmar que é admin */
+    .nav-link--admin { display: none; }
     .nav-separator {
       width: 1px;
       height: 16px;
-      background: #2e3a55;
+      background: rgba(255,255,255,0.12);
     }
   </style>
 </head>
@@ -55,6 +55,8 @@
       <div class="topbar__nav">
         <a href="/" class="nav-link nav-link--active">Clientes</a>
         <a href="/usuarios.html" class="nav-link nav-link--admin" id="navUsuarios">Usuários</a>
+        <div class="nav-separator"></div>
+        <button class="btn-theme" id="btnTheme" title="Alternar tema">🌙</button>
         <div class="nav-separator"></div>
         <button class="nav-link" id="btnLogout">Sair</button>
       </div>
@@ -219,7 +221,28 @@
   <div class="toast" id="toast" hidden></div>
 
   <script>
-    // Logout
+    // ---- Tema escuro ----
+    const btnTheme = document.getElementById('btnTheme');
+    const root = document.documentElement;
+
+    function applyTheme(theme) {
+      root.setAttribute('data-theme', theme);
+      btnTheme.textContent = theme === 'dark' ? '☀️' : '🌙';
+      btnTheme.title = theme === 'dark' ? 'Tema claro' : 'Tema escuro';
+      localStorage.setItem('dc-theme', theme);
+    }
+
+    // Carrega preferência salva ou usa preferência do sistema
+    const saved = localStorage.getItem('dc-theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(saved || (prefersDark ? 'dark' : 'light'));
+
+    btnTheme.addEventListener('click', () => {
+      const current = root.getAttribute('data-theme');
+      applyTheme(current === 'dark' ? 'light' : 'dark');
+    });
+
+    // ---- Logout ----
     document.getElementById('btnLogout').addEventListener('click', async () => {
       await fetch('/api/logout', { method: 'POST' });
       window.location.href = '/login.html';

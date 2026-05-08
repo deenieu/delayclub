@@ -4,16 +4,16 @@
    ===================================================================== */
 
 :root {
-  /* Paleta */
-  --bg:           #f4f1ea;   /* creme suave */
+  /* Paleta — Tema Claro */
+  --bg:           #f4f1ea;
   --bg-alt:       #ebe6da;
   --surface:      #ffffff;
-  --ink:          #1a2238;   /* navy profundo (texto principal) */
+  --ink:          #1a2238;
   --ink-soft:     #4a5168;
   --ink-mute:     #8a8f9d;
   --line:         #e2dccd;
   --line-strong:  #c9c1ae;
-  --gold:         #b08d57;   /* acento dourado discreto */
+  --gold:         #b08d57;
   --gold-soft:    #c9aa7a;
 
   --success:      #2f7d57;
@@ -34,6 +34,30 @@
   --shadow-medium: 0 4px 14px rgba(26,34,56,0.08), 0 16px 40px rgba(26,34,56,0.10);
 }
 
+/* Tema Escuro */
+[data-theme="dark"] {
+  --bg:           #0f1117;
+  --bg-alt:       #1a1d27;
+  --surface:      #1e2130;
+  --ink:          #e8e4d9;
+  --ink-soft:     #a8adc0;
+  --ink-mute:     #6b7089;
+  --line:         #2a2f42;
+  --line-strong:  #363b52;
+  --gold:         #c9a96e;
+  --gold-soft:    #b08d57;
+
+  --success:      #3d9e6e;
+  --success-bg:   #0f2a1e;
+  --warning:      #c47e25;
+  --warning-bg:   #2a1e0a;
+  --danger:       #c04545;
+  --danger-bg:    #2a0f0f;
+
+  --shadow-soft:   0 1px 2px rgba(0,0,0,0.2), 0 4px 16px rgba(0,0,0,0.2);
+  --shadow-medium: 0 4px 14px rgba(0,0,0,0.3), 0 16px 40px rgba(0,0,0,0.3);
+}
+
 /* ---------- Reset ---------- */
 *, *::before, *::after { box-sizing: border-box; }
 body, h1, h2, h3, p, ul, figure { margin: 0; padding: 0; }
@@ -48,14 +72,21 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 /* ---------- Topbar ---------- */
 .topbar {
   background: var(--ink);
   color: var(--bg);
-  border-bottom: 1px solid #0f1729;
+  border-bottom: 1px solid rgba(0,0,0,0.2);
 }
+
+[data-theme="dark"] .topbar {
+  background: #090c14;
+  border-bottom: 1px solid #1a1d27;
+}
+
 .topbar__inner {
   max-width: 1240px;
   margin: 0 auto;
@@ -70,7 +101,7 @@ body {
   width: 42px; height: 42px;
   display: grid; place-items: center;
   background: var(--gold);
-  color: var(--ink);
+  color: #1a2238;
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 18px;
@@ -98,6 +129,27 @@ body {
   letter-spacing: 0.4px;
 }
 
+/* ---------- Botão de tema ---------- */
+.btn-theme {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.07);
+  color: var(--gold-soft);
+  font-size: 17px;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.btn-theme:hover {
+  background: rgba(255,255,255,0.14);
+  color: var(--gold);
+  border-color: rgba(255,255,255,0.25);
+}
+
 /* ---------- Layout container ---------- */
 .container {
   max-width: 1240px;
@@ -120,6 +172,7 @@ body {
   box-shadow: var(--shadow-soft);
   position: relative;
   overflow: hidden;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 .summary-card::before {
   content: '';
@@ -188,6 +241,7 @@ body {
   align-items: end;
   justify-content: space-between;
   box-shadow: var(--shadow-soft);
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 .toolbar__filters {
   display: grid;
@@ -216,15 +270,21 @@ body {
   padding: 10px 12px;
   font-size: 14px;
   color: var(--ink);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.2s ease;
 }
 .field input:focus,
 .field select:focus,
 .form__row input:focus,
 .form__row select:focus {
   outline: none;
-  border-color: var(--ink);
-  box-shadow: 0 0 0 3px rgba(26,34,56,0.10);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(176,141,87,0.18);
+}
+
+/* Select — seta visível no dark mode */
+.field select,
+.form__row select {
+  appearance: auto;
 }
 
 /* ---------- Botões ---------- */
@@ -243,11 +303,11 @@ body {
 }
 .btn:active { transform: translateY(1px); }
 .btn--primary {
-  background: var(--ink);
-  color: var(--bg);
-  border: 1px solid var(--ink);
+  background: var(--gold);
+  color: #1a2238;
+  border: 1px solid var(--gold);
 }
-.btn--primary:hover { background: #0f1729; }
+.btn--primary:hover { background: var(--gold-soft); border-color: var(--gold-soft); }
 .btn--ghost {
   background: transparent;
   color: var(--ink);
@@ -259,7 +319,7 @@ body {
   color: #fff;
   border: 1px solid var(--danger);
 }
-.btn--danger:hover { background: #8b2828; }
+.btn--danger:hover { filter: brightness(1.1); }
 .btn__icon {
   display: inline-block;
   font-size: 18px;
@@ -292,6 +352,7 @@ body {
   border-radius: var(--radius);
   overflow: hidden;
   box-shadow: var(--shadow-soft);
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 .clients-table {
   width: 100%;
@@ -308,6 +369,7 @@ body {
   padding: 14px 18px;
   background: var(--bg-alt);
   border-bottom: 1px solid var(--line);
+  transition: background 0.2s ease;
 }
 .clients-table th.th-actions { text-align: right; }
 .clients-table tbody td {
@@ -316,7 +378,7 @@ body {
   vertical-align: middle;
 }
 .clients-table tbody tr:last-child td { border-bottom: none; }
-.clients-table tbody tr:hover { background: rgba(176, 141, 87, 0.05); }
+.clients-table tbody tr:hover { background: rgba(176,141,87,0.06); }
 
 .client-name {
   font-family: var(--font-display);
@@ -408,13 +470,12 @@ body {
   justify-content: center;
   padding: 16px;
 }
-/* Atributo hidden do HTML deve realmente esconder o modal */
 .modal[hidden] { display: none; }
 .toast[hidden] { display: none; }
 .modal__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 41, 0.55);
+  background: rgba(5, 8, 18, 0.65);
   backdrop-filter: blur(2px);
   animation: fade 0.18s ease;
 }
@@ -428,6 +489,7 @@ body {
   border: 1px solid var(--line);
   overflow: hidden;
   animation: rise 0.22s ease;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 .modal__panel--small { max-width: 420px; }
 .modal__header {
@@ -437,6 +499,7 @@ body {
   padding: 18px 22px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-alt);
+  transition: background 0.2s ease;
 }
 .modal__header h2 {
   font-family: var(--font-display);
@@ -478,6 +541,7 @@ body {
   font-weight: 500;
   font-size: 15px;
   color: var(--ink);
+  transition: background 0.2s ease;
 }
 .form__error {
   background: var(--danger-bg);
@@ -485,7 +549,7 @@ body {
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   font-size: 13px;
-  border: 1px solid #e8b8b8;
+  border: 1px solid rgba(192,69,69,0.3);
 }
 .form__actions {
   display: flex;
@@ -517,8 +581,8 @@ body {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
-.toast--success { background: var(--success); }
-.toast--error   { background: var(--danger); }
+.toast--success { background: var(--success); color: #fff; }
+.toast--error   { background: var(--danger);  color: #fff; }
 
 /* =====================================================================
    RESPONSIVO
@@ -545,11 +609,10 @@ body {
   .toolbar__filters {
     grid-template-columns: 1fr;
     gap: 10px;
-    flex: 0 1 auto;   /* anula o flex-basis 600px do desktop (vira altura mínima em coluna) */
+    flex: 0 1 auto;
   }
   .toolbar .btn--primary { width: 100%; }
 
-  /* Esconde tabela e mostra cards */
   .clients-table { display: none; }
   .clients-cards { display: block; }
 
