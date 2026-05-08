@@ -12,7 +12,8 @@ const state = {
     status: ''
   },
   editingId: null,      // id do cliente em edição (null = novo)
-  confirmCallback: null // callback do modal de confirmação
+  confirmCallback: null, // callback do modal de confirmação
+  currentUser: null     // usuário logado (preenchido no boot via /api/me)
 };
 
 // ---------- Elementos do DOM ----------
@@ -295,6 +296,11 @@ function openModal(client = null) {
     els.clientForm.reset();
     els.clientId.value = '';
     els.fPaymentDate.value = todayISO(); // novo cliente: pagamento = hoje por padrão
+
+    // Pré-preenche o dono do lead com o usuário logado
+    if (state.currentUser) {
+      els.fOwner.value = state.currentUser.username;
+    }
   }
   updateRenewalPreview();
   els.modal.hidden = false;
@@ -495,8 +501,19 @@ function setTopbarDate() {
   els.topbarDate.textContent = fmt.format(d);
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   setTopbarDate();
   bindEvents();
+
+  // Carrega o usuário logado uma única vez.
+  // Também controla a visibilidade do link de admin no menu.
+  try {
+    state.currentUser = await api('/api/me');
+    if (state.currentUser?.role === 'admin') {
+      const nav = document.getElementById('navUsuarios');
+      if (nav) nav.style.display = 'inline-flex';
+    }
+  } catch (_) {}
+
   loadAll();
 });

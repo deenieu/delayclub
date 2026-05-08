@@ -219,17 +219,6 @@
   <div class="toast" id="toast" hidden></div>
 
   <script>
-    // Mostra o link de Usuários apenas para admins
-    fetch('/api/me')
-      .then(r => r.json())
-      .then(user => {
-        if (user.role === 'admin') {
-          const nav = document.getElementById('navUsuarios');
-          nav.style.display = 'inline-flex';
-        }
-      })
-      .catch(() => {});
-
     // Logout
     document.getElementById('btnLogout').addEventListener('click', async () => {
       await fetch('/api/logout', { method: 'POST' });
